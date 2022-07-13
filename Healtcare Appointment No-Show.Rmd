@@ -1,0 +1,207 @@
+---
+title: "Healtcare Appointment No-Show"
+output:
+  pdf_document: default
+  word_document: default
+  html_notebook: default
+---
+
+DESCRIPTION
+
+A patient is considered to be a no-show when they fail to be present for a scheduled appointment. For any healthcare organization, no-shows lead to higher costs and underutilization of resources, which affects the quality of service healthcare organizations provide.
+
+In order to solve this problem, the organizations need to be able to understand why no-show patients do so.
+
+
+Task 1 : Explore the data to check for missing values or erroneous entries, comment on redundant features, and add additional ones if needed.
+
+```{r}
+# Import excel
+library(readxl)
+appointments <- read_excel("appointments.xls")
+# check structure of the data
+str(appointments)
+```
+
+```{r}
+# column names
+names(appointments)
+```
+
+
+
+```{r}
+# convert date columns into character
+appointments$AppointmentRegistration = as.POSIXct(appointments$AppointmentRegistration)
+appointments$AppointmentDate = as.POSIXct(appointments$AppointmentDate)
+
+# Convert columns to factors
+appointments$Gender = as.factor(appointments$Gender)
+appointments$Status = as.factor(appointments$Status)
+appointments$Diabetes = as.factor(appointments$Diabetes)
+appointments$Alcoholism = as.factor(appointments$Alcoholism)
+appointments$HyperTension = as.factor(appointments$HyperTension)
+appointments$Handicap = as.factor(appointments$Handicap)
+appointments$Smokes = as.factor(appointments$Smokes)
+appointments$Scholarship = as.factor(appointments$Scholarship)
+appointments$Tuberculosis = as.factor(appointments$Tuberculosis)
+appointments$Sms_Reminder = as.factor(appointments$Sms_Reminder)
+
+summary(appointments)  # summary of the data
+```
+
+```{r}
+# check for null values
+sapply(appointments, function(x) sum(is.na(x)))
+```
+
+Task 2 : Create a new feature called HourOfTheDay, which will indicate the hour of the day at which the appointment was booked.
+
+```{r}
+# create 3 new features for AppointmentRegistration
+appointments <- transform(appointments, Day_Reg = format(AppointmentRegistration, "%d"))
+appointments <-transform(appointments, Month_Reg = format(AppointmentRegistration, "%m"))
+appointments <- transform(appointments, Year_Reg = format(AppointmentRegistration, "%Y"))
+
+appointments$Day_Reg = as.factor(appointments$Day_Reg)
+appointments$Month_Reg = as.factor(appointments$Month_Reg)
+appointments$Year_Reg = as.factor(appointments$Year_Reg)
+
+summary(appointments)  # summary of the data
+```
+
+Task 3 : Identify and remove outliers from the age column and explain the reason behind the selected outlier treatment using an appropriate plot.
+
+```{r}
+# We see from the summary(appointments) that the minimum age is -1.
+# So we check all the values less than 0.
+appointments[appointments$Age < 0, ]
+# It is only one and we will drop it.
+appointments <-appointments[!(appointments$Age<0),]
+summary(appointments$Age) # summary of the column Age
+```
+
+
+```{r}
+# Plot
+library(ggplot2)
+ggplot(appointments, aes(x=Age)) + geom_histogram(bins=40)
+```
+
+Task 4 : Analyze the probability of showing up with respect to different features. Create a scatter plot and trend lines to analyze the relation between the probability of showing up with respect to age or hour of the day, and describe your findings.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+appointments %>% group_by(Age) %>% 
+  summarise(Show_Up_probability=sum(Status=="Show-Up")/n()) %>% 
+ggplot(aes(x=Age, y=Show_Up_probability)) + geom_point() + geom_smooth(se=F)
+```
+
+We see that the older people show-up more often that younger ones.
+
+Task 5 : Create a bar graph to depict the probability of showing up for diabetes, alcoholism, hypertension, TB, smokes, and scholarship.
+
+```{r}
+# check probability stats about these features
+prop.table(table(appointments$Diabetes, appointments$Status))  
+prop.table(table(appointments$Alcoholism, appointments$Status))
+prop.table(table(appointments$HyperTension, appointments$Status))
+prop.table(table(appointments$Tuberculosis, appointments$Status))
+prop.table(table(appointments$Smokes, appointments$Status))
+prop.table(table(appointments$Scholarship, appointments$Status))
+```
+
+```{r}
+# Plots
+library(gridExtra)
+library(ggplot2)
+g_Diabetes <- ggplot(appointments, aes(x=Diabetes, fill=Status)) + geom_bar(position="fill")
+g_Alcoholism <- ggplot(appointments, aes(x=Alcoholism, fill=Status)) + geom_bar(position="fill")
+g_Hypertension <- ggplot(appointments, aes(x=HyperTension, fill=Status)) + geom_bar(position="fill")
+g_TB <- ggplot(appointments, aes(x=Tuberculosis, fill=Status)) + geom_bar(position="fill")
+g_Smokes <- ggplot(appointments, aes(x=Smokes, fill=Status)) + geom_bar(position="fill")
+g_Scholarship <- ggplot(appointments, aes(x=Scholarship, fill=Status)) + geom_bar(position="fill")
+
+grid.arrange(g_Diabetes, g_Alcoholism, g_Hypertension, g_TB, g_Smokes,  g_Scholarship, ncol=2, top='Bar graphs for features')
+```
+
+Task 6 : Create separate bar graphs to show the probability of showing up with respect to male or female, day of the week, and SMS reminder columns and describe your findings.
+
+```{r}
+# Bar graph to show the probability of showing up with respect to male or female
+ggplot(appointments, aes(x=Gender, fill=Status)) + geom_bar(position="fill")
+```
+
+It seems like the probability both for men and women to Show Up is similar.
+
+
+
+```{r}
+# Bar graph to show the probability of showing up with respect to SMS reminder
+ggplot(appointments, aes(x=Sms_Reminder, fill=Status)) + geom_bar(position="fill")
+```
+
+It seems like Sms reminder is not important enough.
+
+
+```{r}
+ggplot(appointments, aes(x=Day_Reg, fill=Day_Reg )) + geom_bar() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We see that the day with the  maximum probability to show-up in the month is the 24th.
+
+
+Task 7 : Use different classification models to predict the show or no-show status based on the features that display the most variation in the probability of showing up.
+
+Logistic Regression Model
+
+```{r}
+appointments_2 <- select(appointments, Age, Gender, Scholarship, HyperTension, Diabetes, Alcoholism, Handicap,Sms_Reminder, Status)
+```
+
+```{r}
+appointments_2 <- mutate_at(appointments_2, vars(Status), as.factor)
+```
+
+```{r}
+log_model <- glm(Status ~ . ,family = binomial(link = 'logit'),  data = appointments_2 )
+```
+
+```{r}
+summary(log_model)
+```
+
+```{r}
+# Logistic Regression with training and test data set
+library(caTools)
+set.seed(100)
+
+split = sample.split(appointments_2$Status, SplitRatio = 0.70)
+
+train = subset(appointments_2, split == TRUE)
+test = subset(appointments_2, split == FALSE)
+```
+
+```{r}
+logit_model <- glm(formula = Status ~ . ,  data = train, family =binomial(link = 'logit') )
+summary(logit_model)
+```
+
+Task 8 : Evaluate the models and choose the best one for the data.
+
+```{r}
+fitted_p <- predict(logit_model,newdata=test,type='response')
+head(fitted_p)
+```
+
+```{r}
+pred_test <-  ifelse(fitted_p>0.5,1,0)
+```
+
+```{r}
+tab <- table(predicted = pred_test, actual = test$Status)
+tab
+```
+
+We see that there is nearly 80 % chance that the patient will show up.
